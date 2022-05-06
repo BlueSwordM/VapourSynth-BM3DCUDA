@@ -59,8 +59,8 @@
 #include <utility>
 #include <vector>
 
-#include <VapourSynth.h>
-#include <VSHelper.h>
+#include "/usr/local/include/vapoursynth/VapourSynth.h"
+#include "/usr/local/include/vapoursynth/VSHelper.h"
 
 #include <immintrin.h>
 
