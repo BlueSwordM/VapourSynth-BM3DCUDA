@@ -978,9 +978,13 @@ static const VSFrameRef *VS_CC BM3DGetFrame(
                     d->process[2] ? nullptr : src_frame
                 };
                 const int pl[] { 0, 1, 2 };
-                auto frame = vsapi->newVideoFrame2(
+                return vsapi->newVideoFrame2(
                     d->vi->format, d->vi->width, d->vi->height,
                     fr, pl, src_frame, core);
+            } else {
+                auto frame = vsapi->newVideoFrame(
+                    d->vi->format, d->vi->width, d->vi->height * 2 * temporal_width,
+                    src_frame, core);
                 for (int i = 0; i < d->vi->format->numPlanes; ++i) {
                     if (d->zero_init && !d->process[i]) {
                         auto ptr = vsapi->getWritePtr(frame, i);
@@ -990,10 +994,6 @@ static const VSFrameRef *VS_CC BM3DGetFrame(
                     }
                 }
                 return frame;
-            } else {
-                return vsapi->newVideoFrame(
-                    d->vi->format, d->vi->width, d->vi->height * 2 * temporal_width,
-                    src_frame, core);
             }
         }();
 
@@ -1522,7 +1522,11 @@ static const VSFrameRef *VS_CC VAggregateGetFrame(
                     memset(buffer, 0, 2 * plane_width * sizeof(float));
                     for (int i = 0; i < 2 * d->radius + 1; ++i) {
                         auto agg_src = srcps[i];
-                        agg_src += ((2 * d->radius - i) * 2 * plane_height + y) * plane_stride;
+                        // bm3d.VAggregate implements zero padding in temporal dimension
+                        // here we implements replication padding
+                        agg_src += (
+                            std::clamp(2 * d->radius - i, n - d->src_vi->numFrames + 1 + d->radius, n + d->radius)
+                            * 2 * plane_height + y) * plane_stride;
                         for (int x = 0; x < plane_width; ++x) {
                             buffer[x] += agg_src[x];
                         }

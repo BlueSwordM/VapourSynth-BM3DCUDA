@@ -8,6 +8,10 @@ on:
       - 'rtc_source/*'
       - '.github/workflows/windows.yml'
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'which tag to upload to'
+        default: ''
 
 jobs:
   build-windows:
@@ -34,13 +38,13 @@ jobs:
       uses: actions/cache@v2
       with:
         path: C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA
-        key: ${{ runner.os }}-cuda-11.6.2
+        key: ${{ runner.os }}-cuda-11.7.0
 
     - name: Setup CUDA
       if: steps.cache-cuda.outputs.cache-hit != 'true'
       run: |
-        curl -s -o cuda_installer.exe -L https://developer.download.nvidia.com/compute/cuda/11.6.2/network_installers/cuda_11.6.2_windows_network.exe
-        cuda_installer.exe -s nvcc_11.6 cudart_11.6 nvrtc_dev_11.6
+        curl -s -o cuda_installer.exe -L https://developer.download.nvidia.com/compute/cuda/11.7.0/network_installers/cuda_11.7.0_windows_network.exe
+        cuda_installer.exe -s nvcc_11.7 cudart_11.7 nvrtc_dev_11.7
 
     - name: Download VapourSynth headers
       run: |
@@ -61,8 +65,8 @@ jobs:
         -D CMAKE_CUDA_ARCHITECTURES="50;61-real;75-real;86-real"
         -D CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
       env:
-        CUDA_PATH: C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.6
-        CUDA_PATH_V11_6: C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.6
+        CUDA_PATH: C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.7
+        CUDA_PATH_V11_7: C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.7
 
     - name: Build (CUDA)
       run: cmake --build build --verbose
@@ -73,12 +77,12 @@ jobs:
     - name: Setup LLVM
       shell: bash
       run: |
-        curl -s -o llvm-win64.exe -LJO https://github.com/llvm/llvm-project/releases/download/llvmorg-14.0.0/LLVM-14.0.0-win64.exe
+        curl -s -o llvm-win64.exe -LJO https://github.com/llvm/llvm-project/releases/download/llvmorg-14.0.5/LLVM-14.0.5-win64.exe
         7z x -ollvm llvm-win64.exe
 
     - name: Configure, build, install (CPU)
       shell: bash
-      run: for arch in haswell skylake icelake-client znver1 znver2 znver3; do
+      run: for arch in haswell skylake icelake-client alderlake znver1 znver2 znver3; do
           cmake -S . -B build_cpu -G Ninja -LA
             -D CMAKE_BUILD_TYPE=Release
             -D ENABLE_CUDA=OFF
@@ -103,3 +107,32 @@ jobs:
         name: VapourSynth-BM3DCUDA-Windows
         path: artifact
 
+    - name: Compress artifact for release
+      if: github.event_name == 'workflow_dispatch' && github.event.inputs.tag != ''
+      run: |
+        cd artifact
+
+        mkdir VapourSynth-BM3DCUDA-${{ github.event.inputs.tag }}
+        xcopy bm3dcuda.dll VapourSynth-BM3DCUDA-${{ github.event.inputs.tag }} /f
+        7z a -t7z -mx=9 ../VapourSynth-BM3DCUDA-${{ github.event.inputs.tag }}.7z VapourSynth-BM3DCUDA-${{ github.event.inputs.tag }}
+
+        mkdir VapourSynth-BM3DCUDA_RTC-${{ github.event.inputs.tag }}
+        xcopy bm3dcuda_rtc.dll VapourSynth-BM3DCUDA_RTC-${{ github.event.inputs.tag }} /f
+        7z a -t7z -mx=9 ../VapourSynth-BM3DCUDA_RTC-${{ github.event.inputs.tag }}.7z VapourSynth-BM3DCUDA_RTC-${{ github.event.inputs.tag }}
+
+        mkdir VapourSynth-BM3DCPU-${{ github.event.inputs.tag }}
+        xcopy bm3dcpu-*.dll VapourSynth-BM3DCPU-${{ github.event.inputs.tag }} /f
+        7z a -t7z -mx=9 ../VapourSynth-BM3DCPU-${{ github.event.inputs.tag }}.7z VapourSynth-BM3DCPU-${{ github.event.inputs.tag }}
+
+    - name: Release
+      uses: softprops/action-gh-release@v1
+      if: github.event_name == 'workflow_dispatch' && github.event.inputs.tag != ''
+      with:
+        tag_name: ${{ github.event.inputs.tag }}
+        files: |
+          VapourSynth-BM3DCUDA-${{ github.event.inputs.tag }}.7z
+          VapourSynth-BM3DCUDA_RTC-${{ github.event.inputs.tag }}.7z
+          VapourSynth-BM3DCPU-${{ github.event.inputs.tag }}.7z
+        fail_on_unmatched_files: true
+        generate_release_notes: false
+        prerelease: true
